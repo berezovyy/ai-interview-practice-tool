@@ -1,0 +1,277 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Interview Chat - Interview Platform</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+  </head>
+  <body class="bg-gray-100 min-h-screen">
+    <div class="container mx-auto px-6 py-8 max-w-4xl">
+      <div class="mb-6">
+        <a href="/dashboard.html" class="text-blue-600 hover:text-blue-700 font-medium">← Back to Interviews</a>
+      </div>
+
+      <div class="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
+        <div id="interviewDetails" class="mb-6">
+          <!-- Interview details will be loaded here -->
+        </div>
+
+        <div id="chatMessages" class="space-y-4 mb-6 max-h-[60vh] overflow-y-auto">
+          <!-- Messages will be loaded here -->
+        </div>
+
+        <div class="mt-4">
+          <div class="flex gap-4 items-center">
+            <button
+              id="recordButton"
+              class="bg-blue-600 text-white px-6 py-3 rounded-lg text-sm font-semibold tracking-wide shadow-sm hover:bg-blue-700 focus:outline-none focus:ring-4 focus:ring-blue-200"
+            >
+              Start Recording
+            </button>
+            <span id="recordingStatus" class="text-sm text-gray-500"></span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <script>
+      const urlParams = new URLSearchParams(window.location.search);
+      const interviewId = urlParams.get("id");
+
+      if (!interviewId) {
+        window.location.href = "/dashboard.html";
+      }
+
+      let mediaRecorder;
+      let audioChunks = [];
+      let isRecording = false;
+      const recordButton = document.getElementById("recordButton");
+      const recordingStatus = document.getElementById("recordingStatus");
+
+      const ws = new WebSocket(
+        `${window.location.protocol === "https:" ? "wss:" : "ws:"}//${window.location.host}/api/v1/interviews/${interviewId}`,
+      );
+
+      ws.binaryType = "arraybuffer";
+
+      ws.onopen = async () => {
+        console.log("WebSocket connection established");
+        // The server will automatically send interview details
+      };
+
+      ws.onmessage = (event) => {
+        console.log("Received message from server:", event.data);
+        if (event.data === "pong") return;
+
+        try {
+          const message = JSON.parse(event.data);
+
+          if (message.type === "error") {
+            recordingStatus.textContent = `Error: ${message.message}`;
+            return;
+          }
+
+          if (message.type === "interview_details") {
+            displayInterviewDetails(message.data);
+            return;
+          }
+
+          if (message.interviewId === interviewId) {
+            if (message.status === "processing") {
+              appendMessage({
+                role: message.role,
+                content: message.role === "user" ? "Processing audio..." : "Thinking...",
+                timestamp: new Date().toISOString(),
+                isProcessing: true,
+                messageId: message.messageId,
+              });
+            } else {
+              updateOrAppendMessage({
+                messageId: message.messageId,
+                role: message.role,
+                content: message.content,
+                timestamp: message.timestamp || new Date().toISOString(),
+              });
+            }
+            recordingStatus.textContent = "";
+          }
+        } catch (error) {
+          console.error("Error processing message:", error);
+          recordingStatus.textContent = "Error processing message";
+        }
+      };
+
+      ws.onerror = (error) => {
+        console.error("WebSocket error:", error);
+      };
+
+      ws.onclose = () => {
+        console.log("WebSocket connection closed");
+      };
+
+      setInterval(() => {
+        if (ws.readyState === WebSocket.OPEN) {
+          ws.send("ping");
+        }
+      }, 30000);
+
+      async function initializeRecording() {
+        try {
+          const stream = await navigator.mediaDevices.getUserMedia({
+            audio: true,
+          });
+
+          mediaRecorder = new MediaRecorder(stream, {
+            mimeType: "audio/webm;codecs=opus",
+            bitsPerSecond: 128000,
+          });
+
+          mediaRecorder.ondataavailable = (event) => {
+            if (event.data.size > 0) {
+              audioChunks.push(event.data);
+            }
+          };
+
+          mediaRecorder.onstop = async () => {
+            if (audioChunks.length > 0 && ws.readyState === WebSocket.OPEN) {
+              const audioBlob = new Blob(audioChunks, { type: "audio/webm;codecs=opus" });
+
+              const arrayBuffer = await audioBlob.arrayBuffer();
+              ws.send(arrayBuffer);
+
+              audioChunks = [];
+            }
+          };
+
+          mediaRecorder.onstart = () => {
+            recordingStatus.textContent = "Recording...";
+            recordButton.textContent = "Stop Recording";
+            recordButton.classList.add("bg-red-600", "hover:bg-red-700");
+            recordButton.classList.remove("bg-blue-600", "hover:bg-blue-700");
+          };
+        } catch (err) {
+          console.error("Error accessing microphone:", err);
+          alert("Unable to access microphone");
+        }
+      }
+
+      recordButton.addEventListener("click", () => {
+        if (!mediaRecorder) {
+          initializeRecording().then(() => {
+            startRecording();
+          });
+          return;
+        }
+
+        if (isRecording) {
+          stopRecording();
+        } else {
+          startRecording();
+        }
+      });
+
+      function startRecording() {
+        if (!mediaRecorder || mediaRecorder.state === "recording") return;
+
+        isRecording = true;
+        audioChunks = [];
+        mediaRecorder.start();
+      }
+
+      function stopRecording() {
+        if (!mediaRecorder || mediaRecorder.state !== "recording") return;
+
+        isRecording = false;
+        mediaRecorder.stop();
+
+        recordButton.textContent = "Start Recording";
+        recordButton.classList.remove("bg-red-600", "hover:bg-red-700");
+        recordButton.classList.add("bg-blue-600", "hover:bg-blue-700");
+        recordingStatus.textContent = "Processing...";
+      }
+
+      function appendMessage(message) {
+        const chatMessages = document.getElementById("chatMessages");
+        const messageDiv = document.createElement("div");
+        messageDiv.className = `p-4 rounded-lg ${message.role === "user" ? "bg-blue-50 ml-12" : "bg-gray-50 mr-12"}`;
+
+        if (message.isProcessing) {
+          messageDiv.setAttribute("data-message-id", message.messageId);
+        }
+
+        const time = new Date(message.timestamp).toLocaleTimeString();
+        const roleName = message.role === "user" ? "You" : "Interviewer";
+
+        const contentClass = message.isProcessing ? "animate-pulse text-gray-500" : "text-gray-700";
+
+        const formattedContent = message.content
+          .replace(/\n/g, "<br>")
+          .replace(/```([\s\S]*?)```/g, '<pre class="bg-gray-800 text-white p-3 rounded mt-2 mb-2"><code>$1</code></pre>');
+
+        messageDiv.innerHTML = `
+          <p class="text-sm font-semibold text-gray-600 mb-1">
+            ${roleName} <span class="text-xs text-gray-400">${time}</span>
+          </p>
+          <p class="${contentClass} whitespace-pre-wrap">${formattedContent}</p>
+        `;
+
+        chatMessages.appendChild(messageDiv);
+        chatMessages.scrollTop = chatMessages.scrollHeight;
+      }
+
+      function updateOrAppendMessage(message) {
+        const existingMessage = document.querySelector(`[data-message-id="${message.messageId}"]`);
+        if (existingMessage) {
+          const time = new Date(message.timestamp).toLocaleTimeString();
+          const roleName = message.role === "user" ? "You" : "Interviewer";
+
+          const formattedContent = message.content
+            .replace(/\n/g, "<br>")
+            .replace(/```([\s\S]*?)```/g, '<pre class="bg-gray-800 text-white p-3 rounded mt-2 mb-2"><code>$1</code></pre>');
+
+          existingMessage.innerHTML = `
+            <p class="text-sm font-semibold text-gray-600 mb-1">
+              ${roleName} <span class="text-xs text-gray-400">${time}</span>
+            </p>
+            <p class="text-gray-700 whitespace-pre-wrap">${formattedContent}</p>
+          `;
+        } else {
+          appendMessage(message);
+        }
+      }
+
+      function displayInterviewDetails(interview) {
+        const interviewDetails = document.getElementById("interviewDetails");
+
+        const skillBadges = interview.skills
+          .map(
+            (skill) =>
+              `<span class="inline-block bg-blue-100 text-blue-800 text-xs font-medium px-2.5 py-0.5 rounded-full mr-2">${skill}</span>`,
+          )
+          .join("");
+
+        interviewDetails.innerHTML = `
+          <h1 class="text-2xl font-bold text-gray-900 mb-2">${interview.title}</h1>
+          <div class="flex flex-wrap gap-2 mb-4">
+            ${skillBadges}
+          </div>
+          <div class="text-sm text-gray-500">
+            Started: ${new Date(interview.createdAt).toLocaleString()}
+          </div>
+        `;
+
+        if (interview.messages && interview.messages.length > 0) {
+          interview.messages.forEach((message) => {
+            appendMessage({
+              role: message.role,
+              content: message.content,
+              timestamp: message.timestamp,
+              messageId: message.messageId,
+            });
+          });
+        }
+      }
+    </script>
+  </body>
+</html>
