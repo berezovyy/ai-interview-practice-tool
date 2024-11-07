@@ -1,0 +1,204 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Interviews - Interview Platform</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+  </head>
+  <body class="bg-gray-100 min-h-screen">
+    <div class="container mx-auto px-6 py-12 max-w-6xl">
+      <div class="flex justify-between items-center mb-8">
+        <h1 class="text-3xl font-bold text-gray-800">Interviews</h1>
+        <button
+          onclick="openModal()"
+          class="bg-blue-600 text-white px-6 py-3 rounded-lg text-sm font-semibold tracking-wide shadow-sm transition duration-200 ease-in-out hover:bg-blue-700 focus:outline-none focus:ring-4 focus:ring-blue-200 transform hover:scale-[1.02] active:scale-[0.98]"
+        >
+          Create New Interview
+        </button>
+      </div>
+
+      <div id="interviewsList" class="space-y-4">
+        <!-- Interviews will be loaded here -->
+      </div>
+    </div>
+
+    <div id="createModal" class="hidden fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full">
+      <div class="relative top-20 mx-auto p-8 border w-[450px] shadow-lg rounded-xl bg-white">
+        <div class="mt-2">
+          <h3 class="text-2xl font-bold text-gray-800 mb-6">Create New Interview</h3>
+          <form id="createInterviewForm" class="space-y-6">
+            <div>
+              <label class="block text-sm font-semibold text-gray-700 mb-2">Title</label>
+              <select
+                id="interviewTitle"
+                class="mt-1 h-12 block w-full rounded-lg border border-gray-200 px-4 py-2.5 text-gray-700 bg-gray-50 shadow-sm transition duration-200 ease-in-out focus:bg-white focus:border-blue-500 focus:ring-2 focus:ring-blue-200 focus:outline-none"
+              >
+                <!-- Options will be populated by JavaScript -->
+              </select>
+            </div>
+            <div>
+              <label class="block text-sm font-semibold text-gray-700 mb-2">Skills</label>
+              <div id="skillsContainer" class="mt-2 overflow-y-auto">
+                <!-- Skills checkboxes will be populated by JavaScript -->
+              </div>
+            </div>
+            <div class="flex justify-end space-x-4 pt-4">
+              <button
+                type="button"
+                onclick="closeModal()"
+                class="px-6 py-3 rounded-lg text-sm font-semibold text-gray-700 bg-gray-100 hover:bg-gray-200 transition duration-200 ease-in-out focus:outline-none focus:ring-4 focus:ring-gray-200"
+              >
+                Cancel
+              </button>
+              <button
+                type="submit"
+                class="bg-blue-600 text-white px-6 py-3 rounded-lg text-sm font-semibold tracking-wide shadow-sm transition duration-200 ease-in-out hover:bg-blue-700 focus:outline-none focus:ring-4 focus:ring-blue-200 transform hover:scale-[1.02] active:scale-[0.98]"
+              >
+                Create
+              </button>
+            </div>
+          </form>
+        </div>
+      </div>
+    </div>
+
+    <script>
+      const InterviewTitle = {
+        JuniorDeveloper: "Junior Developer Interview",
+        SeniorDeveloper: "Senior Developer Interview",
+        FullStackDeveloper: "Full Stack Developer Interview",
+        FrontendDeveloper: "Frontend Developer Interview",
+        BackendDeveloper: "Backend Developer Interview",
+        SystemArchitect: "System Architect Interview",
+        TechnicalLead: "Technical Lead Interview",
+      };
+
+      const InterviewSkill = {
+        JavaScript: "JavaScript",
+        TypeScript: "TypeScript",
+        React: "React",
+        NodeJS: "NodeJS",
+        Python: "Python",
+        Java: "Java",
+        SystemDesign: "System Design",
+        DataStructures: "Data Structures",
+        Algorithms: "Algorithms",
+        DatabaseDesign: "Database Design",
+        WebSecurity: "Web Security",
+        CloudComputing: "Cloud Computing",
+      };
+
+      function populateFormOptions() {
+        const titleSelect = document.getElementById("interviewTitle");
+        Object.entries(InterviewTitle).forEach(([key, value]) => {
+          const option = document.createElement("option");
+          option.value = key;
+          option.textContent = value;
+          titleSelect.appendChild(option);
+        });
+
+        const skillsContainer = document.getElementById("skillsContainer");
+        Object.entries(InterviewSkill).forEach(([key, value]) => {
+          const div = document.createElement("div");
+          div.className = "flex items-center p-2 hover:bg-gray-50 rounded-lg transition duration-150 ease-in-out";
+          div.innerHTML = `
+            <input type="checkbox" id="skill_${key}" value="${key}" class="h-4 w-4 text-blue-600 rounded border-gray-300 focus:ring-blue-500">
+            <label for="skill_${key}" class="ml-3 text-sm text-gray-700 font-medium">${value}</label>
+          `;
+          skillsContainer.appendChild(div);
+        });
+      }
+
+      async function loadInterviews() {
+        try {
+          const response = await fetch("/api/v1/interviews");
+          if (response.status === 401) {
+            window.location.href = "/auth.html";
+            return;
+          }
+          const interviews = await response.json();
+          const interviewsList = document.getElementById("interviewsList");
+
+          if (interviews.length === 0) {
+            interviewsList.innerHTML = `
+              <div class="text-center py-12">
+                <p class="text-gray-500 text-lg">No interviews found.</p>
+                <p class="text-gray-400 mt-2">Create your first interview to get started!</p>
+              </div>
+            `;
+            return;
+          }
+
+          interviewsList.innerHTML = interviews
+            .map(
+              (interview) => `
+                <div class="bg-white rounded-xl shadow-sm border border-gray-100 p-6 transition duration-200 ease-in-out hover:shadow-md">
+                  <h3 class="font-bold text-xl text-gray-800">${interview.title}</h3>
+                  <div class="mt-4 flex flex-wrap gap-2">
+                    ${interview.skills
+                      .map((skill) => `<span class="bg-blue-50 text-blue-600 text-xs px-3 py-1.5 rounded-full font-medium">${skill}</span>`)
+                      .join("")}
+                  </div>
+                  <div class="mt-4 flex items-center justify-between">
+                    <span class="inline-flex items-center px-3 py-1.5 rounded-full text-sm font-medium ${
+                      interview.status === "Completed" ? "bg-green-50 text-green-700" : "bg-yellow-50 text-yellow-700"
+                    }">
+                      ${interview.status}
+                    </span>
+                    <button
+                      onclick="window.location.href='/interview.html?id=${interview.interviewId}'"
+                      class="text-blue-600 hover:text-blue-700 font-medium text-sm px-4 py-2 rounded-lg hover:bg-blue-50 transition duration-150"
+                    >
+                      Continue Interview →
+                    </button>
+                  </div>
+                </div>
+              `,
+            )
+            .join("");
+        } catch (error) {
+          console.error("Error loading interviews:", error);
+        }
+      }
+
+      function openModal() {
+        document.getElementById("createModal").classList.remove("hidden");
+      }
+
+      function closeModal() {
+        document.getElementById("createModal").classList.add("hidden");
+      }
+
+      document.getElementById("createInterviewForm").addEventListener("submit", async (e) => {
+        e.preventDefault();
+        const title = document.getElementById("interviewTitle").value;
+        const skills = Array.from(document.querySelectorAll("#skillsContainer input:checked")).map((input) => input.value);
+
+        try {
+          const response = await fetch("/api/v1/interviews", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ title, skills }),
+          });
+
+          if (response.ok) {
+            const { interviewId } = await response.json();
+            window.location.href = `/interview.html?id=${interviewId}`;
+          } else {
+            const data = await response.json();
+            alert(data.error || "Failed to create interview");
+          }
+        } catch (error) {
+          console.error("Error creating interview:", error);
+          alert("Failed to create interview");
+        }
+      });
+
+      document.addEventListener("DOMContentLoaded", () => {
+        populateFormOptions();
+        loadInterviews();
+      });
+    </script>
+  </body>
+</html>
