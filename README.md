@@ -1,6 +1,9 @@
 # AI Interview Practice Tool 🤖
 
-![AI Interview Practice Tool Demo](./.github/interview.png)
+
+https://github.com/user-attachments/assets/b5316ad8-1e2f-4979-8081-7765d03858df
+
+
 
 A smart interview practice companion powered by Cloudflare Workers AI. Practice your interview skills with an AI interviewer that adapts to your responses and provides real-time feedback.
 
